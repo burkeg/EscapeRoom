@@ -1,5 +1,5 @@
 import itertools
-
+import pickle
 import cv2
 import numpy as np
 import pandas as pd
@@ -51,11 +51,11 @@ dewarp_coords = {
 }
 unwarped_shape = (424, 699, 3)
 paint_color_names = [
-    ['Raspberry', 'Maroon', 'Red', 'Red Orange', 'Orange', 'Light Orange', 'Yellow Orange', 'Mango', 'Golden Yellow', 'Yellow'],
-    ['Lemon Yellow', 'Lime Green', 'Yellow Green', 'Jade Green', 'Green', 'Pine Green', 'Teal', 'Green Blue', 'Aqua Green', 'Turquoise'],
-    ['Sky Blue', 'Cerulean', 'Light Blue', 'Blue', 'Navy Blue', 'Violet (Purple)', 'Orchid', 'Mauve', 'Pale Rose', 'Pink'],
-    ['Magenta', 'Bubblegum', 'Salmon', 'Peach', 'Light Brown', 'Mahogany', 'Brown', 'Dark Brown', 'Taupe', 'Sand'],
-    ['Tan', 'Harvest Gold', 'Bronze Yellow', 'Metallic Gold', 'Metallic Silver', 'Gray', 'Cool Gray', 'Slate', 'Black', 'White'],
+    ['Raspberry', 'Maroon', 'Red', 'Red_Orange', 'Orange', 'Light_Orange', 'Yellow_Orange', 'Mango', 'Golden_Yellow', 'Yellow'],
+    ['Lemon_Yellow', 'Lime_Green', 'Yellow_Green', 'Jade_Green', 'Green', 'Pine_Green', 'Teal', 'Green_Blue', 'Aqua_Green', 'Turquoise'],
+    ['Sky_Blue', 'Cerulean', 'Light_Blue', 'Blue', 'Navy_Blue', 'Violet_or_Purple', 'Orchid', 'Mauve', 'Pale_Rose', 'Pink'],
+    ['Magenta', 'Bubblegum', 'Salmon', 'Peach', 'Light_Brown', 'Mahogany', 'Brown', 'Dark_Brown', 'Taupe', 'Sand'],
+    ['Tan', 'Harvest_Gold', 'Bronze_Yellow', 'Metallic_Gold', 'Metallic_Silver', 'Gray', 'Cool_Gray', 'Slate', 'Black', 'White'],
 ]
 light_color_names = 'WRGBCMY'
 
@@ -145,7 +145,13 @@ def dewarp_images(image_dict):
         image_dict[light_color] = cv2.resize(image_dict[light_color], unwarped_shape[:-1][::-1])
 
 
-def find_relationships(color_data):
+def find_relationships():
+    color_data = find_pigment_colors()
+
+    try:
+        return pd.read_pickle('./color_relationships.pkl')
+    except:
+        print('Recalculating color_relationships')
     assert isinstance(color_data, pd.DataFrame)
     df = color_data
 
@@ -173,19 +179,81 @@ def find_relationships(color_data):
         return pd.Series(np.append(difference, distance))
 
     pairwise_df[['R diff', 'G diff', 'B diff', 'distance']] = pairwise_df.apply(create_new_columns, axis=1)
+    pairwise_df.to_pickle('./color_relationships.pkl')
     return pairwise_df
 
+def analyze():
+    relationships = find_relationships()
+    light_color_relationships = dict()
+    for light_color in light_color_names:
+        light_color_only = relationships.loc[
+               (relationships['Light 1'] == relationships['Light 2']) &
+               (relationships['Light 1'] == light_color)]
+        assert isinstance(light_color_only, pd.DataFrame)
+        light_color_only = light_color_only.drop(['R diff', 'G diff', 'B diff'], axis=1)
+        light_color_only = light_color_only.sort_values(by='distance', ignore_index=True)
+        light_color_relationships[light_color] = light_color_only
 
+    # light_color_relationships is a dictionary with 1 entry for each light color
+    # Each value is a sorted list showing which paints look the most similar to each other in that light
+    # For each combination of lights, lets see which colors are the most similar in 1 lighting but
+    # maximally different in another lighting
+    def create_new_columns(row):
+        nonlocal light_2_diffs
+        df = light_2_diffs
+        paint_1, paint_2 = (row.iloc[0], row.iloc[2])
+        my_index = row.name
+        other_index = df.index[
+                  (df['Paint 1'] == paint_1) &
+                  (df['Paint 2'] == paint_2)][0]
+        my_difference = row['distance']
+        other_difference = df.loc[
+                  (df['Paint 1'] == paint_1) &
+                  (df['Paint 2'] == paint_2)]['distance'].values[0]
+        # print(my_index, other_index, my_difference, other_difference)
+        index_difference = abs(other_index - my_index)
+        color_difference = abs(other_difference - my_difference)
+        same_in_light = df['Light 1'].values[0] if my_difference > other_difference else row['Light 1']
+        threshold = 256
+        min_difference = min(my_difference, other_difference)
+        if min_difference > threshold:
+            return pd.Series([np.NaN, np.NaN, np.NaN, np.NaN])
+        else:
+            return pd.Series([index_difference, color_difference, same_in_light, min_difference])
+
+    try:
+        with open('paired_light_data.pkl', 'rb') as handle:
+            paired_light_data = pickle.load(handle)
+    except:
+        paired_light_data = dict()
+        print('Recalculating paired_light_data')
+        for light_1, light_2 in combinations(light_color_names, 2):
+            light_1_diffs = light_color_relationships[light_1].sort_values(by=['Paint 1', 'Light 1', 'Paint 2', 'Light 2'])
+            light_2_diffs = light_color_relationships[light_2].sort_values(by=['Paint 1', 'Light 1', 'Paint 2', 'Light 2'])
+            assert isinstance(light_1_diffs, pd.DataFrame)
+            light_1_diffs[['index difference', 'color difference', 'light where same', 'min difference']] = light_1_diffs.apply(create_new_columns, axis=1)
+            paired_light_data[(light_1, light_2)] = light_1_diffs.drop(['Light 1', 'Light 2'], axis=1)
+            paired_light_data[(light_1, light_2)] = paired_light_data[(light_1, light_2)].sort_values(
+                by=['light where same', 'color difference'],
+                ignore_index=True,
+                ascending=False)
+            print(light_1, light_2)
+
+        with open('paired_light_data.pkl', 'wb') as handle:
+            pickle.dump(paired_light_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    # print(paired_light_data)
+
+    print()
+
+    # combined_paired_light_data = pd.concat(paired_light_data.values(), keys=paired_light_data.keys())
+    # combined_paired_light_data.reset_index(inplace=True)
+    # combined_paired_light_data = combined_paired_light_data.drop(['level_2'], axis=1)
+    # combined_paired_light_data.columns = ['Light 1', 'Light 2'] + list(combined_paired_light_data.columns)[2:]
+    return paired_light_data
 
 def do_stuff():
-    color_data = find_pigment_colors()
-    # print(color_dict.values()) # https://chart-studio.plotly.com/create/?fid=plotly2_demo:437#/
-    try:
-        relationships = pd.read_pickle('./color_relationships.pkl')
-    except:
-        relationships = find_relationships(color_data)
-        relationships = relationships.to_pickle('./color_relationships.pkl')
-    print(relationships)
+    # print(relationships)
+    analyze()
 
 
 

@@ -4,7 +4,7 @@ import pandas as pd
 from Paint import PaintColor, LightColor, Paint
 from copy import deepcopy
 import cv2
-from light_scanning import analyze
+from light_scanning import analyze, get_all_pareto_fronts
 
 
 class Tile:
@@ -49,17 +49,7 @@ class Tile:
 
 def test_tiles():
     paired_light_data = analyze()
-    # Let's drop some rows to clean up the data
-    for key in paired_light_data.keys():
-        assert isinstance(paired_light_data[key], pd.DataFrame)
-        paired_light_data[key] = paired_light_data[key].loc[
-            # (paired_light_data[key]['min difference'] < 20) &
-            (paired_light_data[key]['color difference'] > 50)]
-        l_color_data = paired_light_data[key].loc[
-            (paired_light_data[key]['light where same'] == key[0])]
-        r_color_data = paired_light_data[key].loc[
-            (paired_light_data[key]['light where same'] == key[1])]
-        print()
+    pareto_fronts = get_all_pareto_fronts(paired_light_data)
 
     m1 = Tile(
         top_paint=Paint(

@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 import pandas as pd
 from itertools import combinations, product
+import oapackage
 
 dewarp_coords = {
         'W': (
@@ -216,6 +217,18 @@ def analyze():
         same_in_light = df['Light 1'].values[0] if my_difference > other_difference else row['Light 1']
         threshold = 256
         min_difference = min(my_difference, other_difference)
+
+        # for example if 'I' am white light and 'other' is red light, this function is called once for
+        # each pair of colors. Let's say we're comparing aqua green and black.
+        # my_index is how far apart in rank aqua green and black were in RGB distance in white light.
+        # other_index is how far apart in rank aqua green and black were in RGB distance in red light.
+        # my_difference is how far apart in RGB distance aqua green and black are in white light.
+        # other_difference is how far apart in RGB distance aqua green and black are in red light.
+        # This adds a column for the following:
+        # index_difference: higher when my_index and other_index are far apart.
+        # color_difference: higher when my_difference and other_difference are far apart.
+        # same_in_light: was it white or red light that made aqua green and black look more similar?
+        # min_difference: for the lighting where aqua green and black were more similar, how similar exactly?
         if min_difference > threshold:
             return pd.Series([np.NaN, np.NaN, np.NaN, np.NaN])
         else:
@@ -232,7 +245,7 @@ def analyze():
             light_2_diffs = light_color_relationships[light_2].sort_values(by=['Paint 1', 'Light 1', 'Paint 2', 'Light 2'])
             assert isinstance(light_1_diffs, pd.DataFrame)
             light_1_diffs[['index difference', 'color difference', 'light where same', 'min difference']] = light_1_diffs.apply(create_new_columns, axis=1)
-            paired_light_data[(light_1, light_2)] = light_1_diffs.drop(['Light 1', 'Light 2'], axis=1)
+            paired_light_data[(light_1, light_2)] = light_1_diffs.drop(['Light 1', 'Light 2', 'distance'], axis=1)
             paired_light_data[(light_1, light_2)] = paired_light_data[(light_1, light_2)].sort_values(
                 by=['light where same', 'color difference'],
                 ignore_index=True,
@@ -250,6 +263,46 @@ def analyze():
     # combined_paired_light_data = combined_paired_light_data.drop(['level_2'], axis=1)
     # combined_paired_light_data.columns = ['Light 1', 'Light 2'] + list(combined_paired_light_data.columns)[2:]
     return paired_light_data
+
+def calc_pareto(df):
+    # https://oapackage.readthedocs.io/en/latest/examples/example_pareto.html
+    df.reset_index(inplace=True, drop=True)
+    df_filtered = df.drop(['Paint 1', 'Paint 2', 'index difference', 'light where same'], axis=1)
+    datapoints = df_filtered.to_numpy().transpose()
+    min_distance_max = np.max(datapoints, 1)[1]
+    datapoints[1, :] = min_distance_max - datapoints[1, :]
+
+    for ii in range(0, datapoints.shape[1]):
+        w = datapoints[:, ii]
+        fac = .6 + .4 * np.linalg.norm(w)
+        datapoints[:, ii] = (1 / fac) * w
+
+    pareto = oapackage.ParetoDoubleLong()
+
+    for ii in range(0, datapoints.shape[1]):
+        w = oapackage.doubleVector((datapoints[0, ii], datapoints[1, ii]))
+        pareto.addvalue(w, ii)
+
+    lst = pareto.allindices()  # the indices of the Pareto optimal designs
+
+    return df.loc(axis=0)[lst]
+
+def get_all_pareto_fronts(paired_light_data):
+    paired_light_data = analyze()
+    pareto_fronts = dict() # for each combo of light colors, show the pareto front of optimal colors for each light
+
+    for key in paired_light_data.keys():
+        # l_color, r_color = key
+        assert isinstance(paired_light_data[key], pd.DataFrame)
+        l_color_data = paired_light_data[key].loc[
+            (paired_light_data[key]['light where same'] == key[0])]
+        r_color_data = paired_light_data[key].loc[
+            (paired_light_data[key]['light where same'] == key[1])]
+
+        l_color_data = calc_pareto(l_color_data)
+        r_color_data = calc_pareto(r_color_data)
+        pareto_fronts[key] = (l_color_data, r_color_data)
+    return pareto_fronts
 
 def do_stuff():
     # print(relationships)

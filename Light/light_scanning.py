@@ -211,7 +211,6 @@ def analyze():
         other_difference = df.loc[
                   (df['Paint 1'] == paint_1) &
                   (df['Paint 2'] == paint_2)]['distance'].values[0]
-        # print(my_index, other_index, my_difference, other_difference)
         index_difference = abs(other_index - my_index)
         color_difference = abs(other_difference - my_difference)
         same_in_light = df['Light 1'].values[0] if my_difference > other_difference else row['Light 1']
@@ -244,24 +243,16 @@ def analyze():
             light_1_diffs = light_color_relationships[light_1].sort_values(by=['Paint 1', 'Light 1', 'Paint 2', 'Light 2'])
             light_2_diffs = light_color_relationships[light_2].sort_values(by=['Paint 1', 'Light 1', 'Paint 2', 'Light 2'])
             assert isinstance(light_1_diffs, pd.DataFrame)
-            light_1_diffs[['index difference', 'color difference', 'light where same', 'min difference']] = light_1_diffs.apply(create_new_columns, axis=1)
+            light_1_diffs[['index difference', 'other light difference', 'light where same', 'same light difference']] = light_1_diffs.apply(create_new_columns, axis=1)
             paired_light_data[(light_1, light_2)] = light_1_diffs.drop(['Light 1', 'Light 2', 'distance'], axis=1)
             paired_light_data[(light_1, light_2)] = paired_light_data[(light_1, light_2)].sort_values(
-                by=['light where same', 'color difference'],
+                by=['light where same', 'other light difference'],
                 ignore_index=True,
                 ascending=False)
             print(light_1, light_2)
 
         with open('paired_light_data.pkl', 'wb') as handle:
             pickle.dump(paired_light_data, handle, protocol=pickle.HIGHEST_PROTOCOL)
-    # print(paired_light_data)
-
-    print()
-
-    # combined_paired_light_data = pd.concat(paired_light_data.values(), keys=paired_light_data.keys())
-    # combined_paired_light_data.reset_index(inplace=True)
-    # combined_paired_light_data = combined_paired_light_data.drop(['level_2'], axis=1)
-    # combined_paired_light_data.columns = ['Light 1', 'Light 2'] + list(combined_paired_light_data.columns)[2:]
     return paired_light_data
 
 def calc_pareto(df):
@@ -269,13 +260,19 @@ def calc_pareto(df):
     df.reset_index(inplace=True, drop=True)
     df_filtered = df.drop(['Paint 1', 'Paint 2', 'index difference', 'light where same'], axis=1)
     datapoints = df_filtered.to_numpy().transpose()
-    min_distance_max = np.max(datapoints, 1)[1]
-    datapoints[1, :] = min_distance_max - datapoints[1, :]
+    diff_in_main_light_max = np.max(datapoints, 1)[1]
+    diff_in_main_light_min = np.min(datapoints, 1)[1]
+    diff_in_main_light_factor = (diff_in_main_light_max - diff_in_main_light_min)
+    diff_in_other_light_max = np.max(datapoints, 1)[0]
+    diff_in_other_light_min = np.min(datapoints, 1)[0]
+    diff_in_other_light_factor = (diff_in_other_light_max - diff_in_other_light_min)
 
-    for ii in range(0, datapoints.shape[1]):
-        w = datapoints[:, ii]
-        fac = .6 + .4 * np.linalg.norm(w)
-        datapoints[:, ii] = (1 / fac) * w
+    # normalize
+    datapoints[0, :] = (datapoints[0, :] - diff_in_other_light_min) / diff_in_other_light_factor
+    datapoints[1, :] = (datapoints[1, :] - diff_in_main_light_min) / diff_in_main_light_factor
+
+    # We actually want to optimze for smaller difference in the current light and larger in other light.
+    datapoints[1, :] = 1 - datapoints[1, :]
 
     pareto = oapackage.ParetoDoubleLong()
 
@@ -283,7 +280,15 @@ def calc_pareto(df):
         w = oapackage.doubleVector((datapoints[0, ii], datapoints[1, ii]))
         pareto.addvalue(w, ii)
 
-    lst = pareto.allindices()  # the indices of the Pareto optimal designs
+    # the indices of the Pareto optimal designs
+    lst = pareto.allindices()
+
+    # Undo inversion of current light delta
+    datapoints[1, :] = 1 - datapoints[1, :]
+
+    # Undo normalization
+    datapoints[0, :] = (datapoints[0, :] * diff_in_other_light_factor) + diff_in_other_light_min
+    datapoints[1, :] = (datapoints[1, :] * diff_in_main_light_factor) + diff_in_main_light_min
 
     return df.loc(axis=0)[lst]
 
@@ -291,21 +296,28 @@ def get_all_pareto_fronts(paired_light_data):
     paired_light_data = analyze()
     pareto_fronts = dict() # for each combo of light colors, show the pareto front of optimal colors for each light
 
-    for key in paired_light_data.keys():
-        # l_color, r_color = key
-        assert isinstance(paired_light_data[key], pd.DataFrame)
-        l_color_data = paired_light_data[key].loc[
-            (paired_light_data[key]['light where same'] == key[0])]
-        r_color_data = paired_light_data[key].loc[
-            (paired_light_data[key]['light where same'] == key[1])]
+    try:
+        with open('pareto_fronts.pkl', 'rb') as handle:
+            pareto_fronts = pickle.load(handle)
+    except:
+        print('Recalculating pareto_fronts')
+        for key in paired_light_data.keys():
+            # l_color, r_color = key
+            assert isinstance(paired_light_data[key], pd.DataFrame)
+            l_color_data = paired_light_data[key].loc[
+                (paired_light_data[key]['light where same'] == key[0])]
+            r_color_data = paired_light_data[key].loc[
+                (paired_light_data[key]['light where same'] == key[1])]
 
-        l_color_data = calc_pareto(l_color_data)
-        r_color_data = calc_pareto(r_color_data)
-        pareto_fronts[key] = (l_color_data, r_color_data)
+            l_color_data = calc_pareto(l_color_data)
+            r_color_data = calc_pareto(r_color_data)
+            pareto_fronts[key] = (l_color_data, r_color_data)
+
+        with open('pareto_fronts.pkl', 'wb') as handle:
+            pickle.dump(pareto_fronts, handle, protocol=pickle.HIGHEST_PROTOCOL)
     return pareto_fronts
 
 def do_stuff():
-    # print(relationships)
     analyze()
 
 

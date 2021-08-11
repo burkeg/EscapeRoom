@@ -5,6 +5,7 @@ from Paint import PaintColor, LightColor, Paint
 from copy import deepcopy
 import cv2
 from light_scanning import analyze, get_all_pareto_fronts
+from CMYK import Converter
 
 
 class Tile:
@@ -30,7 +31,7 @@ class Tile:
             assert isinstance(side, Paint)
             side.light_color = light_color
 
-    def to_pixels(self, side_length=31):
+    def to_pixels(self, side_length=31, with_text=False):
         # stolen from here
         # https://stackoverflow.com/questions/51875114/triangle-filling-in-opencv
         image = np.zeros((side_length, side_length, 3), np.uint8)
@@ -39,11 +40,45 @@ class Tile:
         pt3 = (side_length // 2, side_length // 2)
         triangle_cnt = np.array([pt1, pt2, pt3])
 
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        bottomLeftCornerOfText = (side_length // 4, side_length // 8)
+        fontScale = 0.4 * side_length / 301
+        fontColor = (255, 255, 255)
+        lineType = 0
+
         for _ in range(4):
-            color = self.sides[0].RGB.tolist()[::-1]
+            paint = self.sides[0]
+            assert isinstance(paint, Paint)
+            color = Converter.rgb_to_bgr(*paint.RGB)
             cv2.drawContours(image, [triangle_cnt], 0, color, -1)
             self.rotate()
             image = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
+
+        if with_text:
+            for _ in range(4):
+                paint = self.sides[0]
+                assert isinstance(paint, Paint)
+                color = Converter.rgb_to_bgr(*paint.RGB)
+                cmyk_str = '[' + ','.join([f'{a:.2f}' for a in paint.CMYK]) + ']'
+                cmyk_filter_str = '[' + ','.join([f'{a:.2f}' for a in paint.cmyk_filter]) + ']'
+                message = f'Light:{paint.light_color.name}\n' \
+                          f'Paint:{paint.paint_color.name}\n' \
+                          f'rgb:{paint.RGB}\n' \
+                          f'cmyk:{cmyk_str}\n' \
+                          f'rgb_filter:{paint.rgb_filter}\n' \
+                          f'cmyk_filter:{cmyk_filter_str}'
+                for i, line in enumerate(message.split('\n')):
+                    text_size = cv2.getTextSize(message, font, fontScale, 1)
+                    bottomLeftCornerOfText = (side_length // 4,
+                                              int(text_size[0][1] * (1.3 * (i + 1))))
+                    cv2.putText(image, line,
+                                bottomLeftCornerOfText,
+                                font,
+                                fontScale,
+                                fontColor,
+                                lineType)
+                self.rotate()
+                image = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
         return image
 
 
@@ -131,8 +166,26 @@ def demo_pareto_fronts():
             print()
     print()
 
+def demo_cmyk_tiles():
+    top_paint = Paint(
+        paint_color=PaintColor['White'],
+        light_color=LightColor['W'])
+    top_paint.rgb_filter
+    right_paint = Paint(
+        paint_color=PaintColor['Green'],
+        light_color=LightColor['W'])
+    bottom_paint = Paint(
+        paint_color=PaintColor['White'],
+        light_color=LightColor['G'])
+    left_paint = Paint(
+        paint_color=PaintColor['Green'],
+        light_color=LightColor['G'])
+    tile = Tile(top_paint, right_paint, bottom_paint, left_paint)
+    cv2.imshow('demo cmyk', tile.to_pixels(1001, with_text=True))
+
+
 
 
 if __name__ == '__main__':
-    demo_pareto_fronts()
-    # cv2.waitKey(0)
+    demo_cmyk_tiles()
+    cv2.waitKey(0)

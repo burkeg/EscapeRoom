@@ -1,9 +1,10 @@
 from enum import Enum
-from light_scanning import find_pigment_colors, paint_color_names, light_color_names
+from light_scanning import find_pigment_colors, paint_color_names, light_color_names, perfect_colors
 from itertools import chain
 from CMYK import Converter
 
-PaintColor = Enum('PaintColor', dict([(letter, i + 1) for i, letter in enumerate(chain.from_iterable(paint_color_names))]))
+# PaintColor = Enum('PaintColor', dict([(letter, i + 1) for i, letter in enumerate(chain.from_iterable(paint_color_names))]))
+PaintColor = Enum('PaintColor', dict([(letter, i + 1) for i, letter in enumerate(chain.from_iterable(paint_color_names + [list(perfect_colors.keys())]))]))
 LightColor = Enum('LightColor', dict([(letter, i + 1) for i, letter in enumerate(light_color_names)]))
 
 class Paint:
@@ -45,7 +46,7 @@ class Paint:
         return self._rgb_filter
 
     @rgb_filter.setter
-    def rgb_filter(self, *args):
+    def rgb_filter(self, args):
         assert len(args) == 3
         self._rgb_filter = [*args]
 
@@ -54,16 +55,15 @@ class Paint:
         return self._cmyk_filter
 
     @cmyk_filter.setter
-    def cmyk_filter(self, *args):
+    def cmyk_filter(self, args):
         assert len(args) == 4
         self._cmyk_filter = [*args]
 
     def _apply_filters(self, *rgb):
         assert len(rgb) == 3
-        rgb_inter = list(map(lambda pair: int((pair[0] / 255) * pair[1]), zip(self._rgb_filter, rgb)))
-        cmyk = Converter.rgb_to_cmyk(*rgb_inter)
-        cmyk_inter = list(map(lambda pair: pair[0] * pair[1], zip(self._cmyk_filter, cmyk)))
-        return Converter.cmyk_to_rgb(*cmyk_inter)
+        return Converter.filter_rgb_by_cmyk(
+            *Converter.filter_rgb_by_rgb(*self._rgb_filter, *rgb),
+            *self._cmyk_filter)
 
 
 if __name__ == '__main__':

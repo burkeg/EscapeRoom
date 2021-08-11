@@ -22,6 +22,42 @@ class Tile:
         if light_color is not None:
             self.update_light(light_color)
 
+    @property
+    def top(self):
+        return self.sides[0]
+
+    @top.setter
+    def top(self, new_val):
+        assert isinstance(new_val, Paint)
+        self.sides[0] = new_val
+
+    @property
+    def right(self):
+        return self.sides[1]
+
+    @right.setter
+    def right(self, new_val):
+        assert isinstance(new_val, Paint)
+        self.sides[1] = new_val
+
+    @property
+    def bottom(self):
+        return self.sides[2]
+
+    @bottom.setter
+    def bottom(self, new_val):
+        assert isinstance(new_val, Paint)
+        self.sides[2] = new_val
+
+    @property
+    def left(self):
+        return self.sides[3]
+
+    @left.setter
+    def left(self, new_val):
+        assert isinstance(new_val, Paint)
+        self.sides[3] = new_val
+
     def rotate(self, amount_clockwise=1):
         self.sides.rotate(amount_clockwise)
 
@@ -152,12 +188,12 @@ def demo_pareto_fronts():
 
             # Stolen from here:
             # https://stackoverflow.com/questions/14063070/overlay-a-smaller-image-on-a-larger-image-python-opencv
-            height, width = 1000, 1000
-            tile_size = 101
+            height, width = 3000, 3000
+            tile_size = 301
             image = np.zeros((height, width, 3), np.uint8)
             l_img = image
             for (x_pos, y_pos), tile in normalized_tile_dict.items():
-                s_img = tile.to_pixels(tile_size)
+                s_img = tile.to_pixels(tile_size, with_text=True)
                 x_offset = int(tile_size + (width - 2*tile_size)*x_pos)
                 y_offset = int(tile_size + (height - 2*tile_size)*y_pos)
                 l_img[y_offset:y_offset + s_img.shape[0], x_offset:x_offset + s_img.shape[1]] = s_img
@@ -170,22 +206,67 @@ def demo_cmyk_tiles():
     top_paint = Paint(
         paint_color=PaintColor['White'],
         light_color=LightColor['W'])
-    top_paint.rgb_filter
+    top_paint.rgb_filter = [0, 255, 255]
     right_paint = Paint(
-        paint_color=PaintColor['Green'],
+        paint_color=PaintColor['White'],
         light_color=LightColor['W'])
+    right_paint.rgb_filter = [255, 0, 255]
     bottom_paint = Paint(
         paint_color=PaintColor['White'],
-        light_color=LightColor['G'])
+        light_color=LightColor['W'])
+    bottom_paint.rgb_filter = [255, 255, 0]
     left_paint = Paint(
-        paint_color=PaintColor['Green'],
+        paint_color=PaintColor['White'],
+        light_color=LightColor['W'])
+    left_paint.rgb_filter = [255, 255, 255]
+    tile1 = Tile(top_paint, right_paint, bottom_paint, left_paint)
+    cv2.imshow('demo cmyk', tile1.to_pixels(1001, with_text=True))
+
+    top_paint = Paint(
+        paint_color=PaintColor['White'],
+        light_color=LightColor['W'])
+    top_paint.cmyk_filter = [0, 1, 1, 1]
+    right_paint = Paint(
+        paint_color=PaintColor['White'],
+        light_color=LightColor['W'])
+    right_paint.cmyk_filter = [1, 0, 1, 1]
+    bottom_paint = Paint(
+        paint_color=PaintColor['White'],
+        light_color=LightColor['C'])
+    bottom_paint.cmyk_filter = [1, 1, 1, 1]
+    left_paint = Paint(
+        paint_color=PaintColor['White'],
+        light_color=LightColor['W'])
+    left_paint.cmyk_filter = [1, 1, 1, 1]
+    tile2 = Tile(top_paint, right_paint, bottom_paint, left_paint)
+    cv2.imshow('demo cmyk 2', tile2.to_pixels(1001, with_text=True))
+
+    top_paint = Paint(
+        paint_color=PaintColor['Perfect_Cyan'],
+        light_color=LightColor['R'])
+    top_paint.rgb_filter = [255, 255, 255]
+    top_paint.cmyk_filter = [1, 1, 1, 1]
+    right_paint = Paint(
+        paint_color=PaintColor['Perfect_Cyan'],
         light_color=LightColor['G'])
-    tile = Tile(top_paint, right_paint, bottom_paint, left_paint)
-    cv2.imshow('demo cmyk', tile.to_pixels(1001, with_text=True))
+    right_paint.rgb_filter = [255, 255, 255]
+    right_paint.cmyk_filter = [1, 1, 1, 1]
+    bottom_paint = Paint(
+        paint_color=PaintColor['Perfect_Cyan'],
+        light_color=LightColor['B'])
+    bottom_paint.rgb_filter = [255, 255, 255]
+    bottom_paint.cmyk_filter = [1, 1, 1, 1]
+    left_paint = Paint(
+        paint_color=PaintColor['Perfect_Blue'],
+        light_color=LightColor['W'])
+    left_paint.rgb_filter = [255, 255, 255]
+    left_paint.cmyk_filter = [1, 1, 1, 1]
+    tile3 = Tile(top_paint, right_paint, bottom_paint, left_paint)
+    cv2.imshow('demo cmyk 2', tile3.to_pixels(301, with_text=True))
 
 
 
 
 if __name__ == '__main__':
-    demo_cmyk_tiles()
+    demo_pareto_fronts()
     cv2.waitKey(0)

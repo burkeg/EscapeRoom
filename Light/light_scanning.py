@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from itertools import combinations, product
 import oapackage
+from CMYK import Converter
 
 dewarp_coords = {
         'W': (
@@ -58,6 +59,16 @@ paint_color_names = [
     ['Magenta', 'Bubblegum', 'Salmon', 'Peach', 'Light_Brown', 'Mahogany', 'Brown', 'Dark_Brown', 'Taupe', 'Sand'],
     ['Tan', 'Harvest_Gold', 'Bronze_Yellow', 'Metallic_Gold', 'Metallic_Silver', 'Gray', 'Cool_Gray', 'Slate', 'Black', 'White'],
 ]
+perfect_colors = {
+    'Perfect_White': [255, 255, 255],
+    'Perfect_Red': [255, 0, 0],
+    'Perfect_Green': [0, 255, 0],
+    'Perfect_Blue': [0, 0, 255],
+    'Perfect_Cyan': [0, 255, 255],
+    'Perfect_Magenta': [255, 0, 255],
+    'Perfect_Yellow': [255, 255, 0],
+    'Perfect_Black': [0, 0, 0],
+}
 light_color_names = 'WRGBCMY'
 
 def unwarped():
@@ -111,6 +122,35 @@ def find_pigment_colors():
     data = []
     for (light_color, paint_color), avg_color in paint_color_dict.items():
         data.append((light_color, paint_color, avg_color))
+
+    # Add perfect colors
+    for paint_color, rgb in perfect_colors.items():
+        # White light
+        data.append(('W', paint_color, rgb.copy()))
+        # Red light
+        rgb_vals = Converter.filter_rgb_by_rgb(*rgb.copy(), *perfect_colors['Perfect_Red'])
+        data.append(('R', paint_color, rgb_vals))
+        # Green light
+        rgb_vals = Converter.filter_rgb_by_rgb(*rgb.copy(), *perfect_colors['Perfect_Green'])
+        data.append(('G', paint_color, rgb_vals))
+        # Blue light
+        rgb_vals = Converter.filter_rgb_by_rgb(*rgb.copy(), *perfect_colors['Perfect_Blue'])
+        data.append(('B', paint_color, rgb_vals))
+        # Cyan light
+        rgb_vals = Converter.filter_rgb_by_rgb(*rgb.copy(),
+                                               0, 255, 255)
+        data.append(('C', paint_color, rgb_vals))
+        # Magenta light
+        rgb_vals = Converter.filter_rgb_by_rgb(*rgb.copy(),
+                                               255, 0, 255)
+        data.append(('M', paint_color, rgb_vals))
+        # Yellow light
+        rgb_vals = Converter.filter_rgb_by_rgb(*rgb.copy(),
+                                               255, 255, 0)
+        data.append(('Y', paint_color, rgb_vals))
+
+
+
     return pd.DataFrame(data=data, columns=['Light Color', 'Paint Color', 'Average'])
 
 

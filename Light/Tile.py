@@ -6,7 +6,7 @@ from copy import deepcopy
 import cv2
 from light_scanning import analyze, get_all_pareto_fronts
 from CMYK import Converter
-
+import math
 
 class Tile:
     def __init__(self, top_paint=None, right_paint=None, bottom_paint=None, left_paint=None, like=None, light_color=None):
@@ -262,11 +262,68 @@ def demo_cmyk_tiles():
     left_paint.rgb_filter = [255, 255, 255]
     left_paint.cmyk_filter = [1, 1, 1, 1]
     tile3 = Tile(top_paint, right_paint, bottom_paint, left_paint)
-    cv2.imshow('demo cmyk 2', tile3.to_pixels(301, with_text=True))
+    cv2.imshow('demo cmyk 3', tile3.to_pixels(301, with_text=True))
 
 
+def printable_white():
+    color_groups = []
+    paints = list(PaintColor)
+    for i in range(math.ceil(len(paints) / 4)):
+        color_groups.append(
+            tuple(
+                paints[(i*4):((i+1)*4)]
+            ))
+
+    tiles = []
+    for color_group in color_groups:
+        top, right, bot, left = (PaintColor.Perfect_Black, ) * 4
+        if len(color_group) == 4:
+            top, right, bot, left = color_group
+        elif len(color_group) == 3:
+            top, right, bot = color_group
+        elif len(color_group) == 2:
+            top, right = color_group
+        elif len(color_group) == 1:
+            top = color_group
+
+        top_paint = Paint(
+            paint_color=top,
+            light_color=LightColor['W'])
+        right_paint = Paint(
+            paint_color=right,
+            light_color=LightColor['W'])
+        bottom_paint = Paint(
+            paint_color=bot,
+            light_color=LightColor['W'])
+        left_paint = Paint(
+            paint_color=left,
+            light_color=LightColor['W'])
+        tile = Tile(top_paint, right_paint, bottom_paint, left_paint)
+        tiles.append(tile)
+        # cv2.imshow('test', tile.to_pixels(301, with_text=True))
+        # cv2.waitKey(0)
+
+    tiles_per_side = math.ceil(math.sqrt(len(tiles)))
+    height, width = 3000, 3000
+    # tile_size = math.ceil(height / (tiles_per_side + 1))
+    tile_size = math.ceil(height / (tiles_per_side + 0))
+    image = np.zeros((height, width, 3), np.uint8)
+    l_img = image
+
+    for i, tile in enumerate(tiles):
+        x_index = i % tiles_per_side
+        y_index = i // tiles_per_side
+        s_img = tile.to_pixels(tile_size, with_text=False)
+        # x_offset = int(tile_size * (x_index + 0.5))
+        # y_offset = int(tile_size * (y_index + 0.5))
+        x_offset = int(tile_size * (x_index))
+        y_offset = int(tile_size * (y_index))
+        l_img[y_offset:y_offset + s_img.shape[0], x_offset:x_offset + s_img.shape[1]] = s_img
+    cv2.imwrite(f'jo_printing_no_labels.png', l_img)
 
 
 if __name__ == '__main__':
-    demo_pareto_fronts()
+    # demo_pareto_fronts()
+    # demo_cmyk_tiles()
+    printable_white()
     cv2.waitKey(0)
